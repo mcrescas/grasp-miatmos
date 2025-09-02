@@ -371,7 +371,7 @@ int grasp_output_tile_function_csv_process(grasp_output_stream *stream, grasp_se
                 fprintf(f,"%cbias_sdt%d", sep, (int) (results->information.radius[0][j]));
             }
         }
-/*        
+       
         // This code prints the first radiance input/fit
         if(grasp_output_tile_products_retrieval_fit(results)){
             for (iwln = 0; iwln < settings->retrieval.NW; iwln++) {
@@ -381,7 +381,6 @@ int grasp_output_tile_function_csv_process(grasp_output_stream *stream, grasp_se
                 fprintf(f,"%cfitrad1_wl%d", sep, (int)(settings->retrieval.WAVE[iwln]*1000));
             }
         }
- */
         
         fprintf(f,"\n");
 
@@ -614,7 +613,7 @@ int grasp_output_tile_function_csv_process(grasp_output_stream *stream, grasp_se
                                 fprintf(f, "%c%f", sep, grasp_output_tile_errest_aerosol_mic_bias_sd(results, itime,ix,iy,j));
                             }
                         }
-/*
+
                         // This code prints the first radiance input/fit
                         if(grasp_output_tile_products_retrieval_fit(results)){
                             const pixel_t *original=grasp_output_tile_retrieval_fit_pixel_original(results, itime,ix,iy);
@@ -626,7 +625,7 @@ int grasp_output_tile_function_csv_process(grasp_output_stream *stream, grasp_se
                                 fprintf(f, "%c%f", sep, fit->meas[iwln].i[0]);
                             }
                         }
-*/ 
+
                         fprintf(f, "\n");
                     }
                 }

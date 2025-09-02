@@ -423,6 +423,15 @@ int grasp_output_segment_function_csv_process(grasp_output_stream *stream, grasp
                 }
             }
         }
+        // if(settings->retrieval.products.retrieval.fit && output->retrieval->fit->segment_fit) {
+        if(settings->retrieval.products.retrieval.fit || true) {
+            // Assuming all pixels will have the same wavelengths
+            int n_whls = output->retrieval.fit.segment_fit.pixel[0].nwl;
+            // for (iwln = 0; iwln < settings->retrieval.NW; iwln++) {
+            for (iwln = 0; iwln < n_whls; iwln++) {
+                fprintf(f,"%cmeas_%f", sep, (settings->retrieval.WAVE[iwln]*1000));
+            }
+        }
         
         fprintf(f,"\n");
 
@@ -713,6 +722,17 @@ int grasp_output_segment_function_csv_process(grasp_output_stream *stream, grasp
                         for (isd = 0; isd < settings->retrieval.NSD; isd++) {
                             fprintf(f,"%c%f", sep, grasp_output_segment_errest_aerosol_lidar_bias_lr(output,ipixel,iwln,isd));
                         }
+                    }
+                }
+            }
+            if(settings->retrieval.products.retrieval.fit || true) {
+                int n_whls = output->retrieval.fit.segment_fit.pixel[ipixel].nwl;
+                for (iwln = 0; iwln < n_whls; iwln++) {
+                    if (output->retrieval.fit.segment_fit.pixel[ipixel].meas[iwln].meas_type[0] == 41) {
+                        float data = output->retrieval.fit.segment_fit.pixel[ipixel].meas[iwln].i[0];
+                        fprintf(f,"%c%f", sep, data);
+                    } else {
+                        fprintf(f,"%c%s", sep, "");
                     }
                 }
             }
