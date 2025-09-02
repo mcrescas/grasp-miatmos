@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+# package name available in variable DPKG_MAINTSCRIPT_PACKAGE
+# package version available in $2
+install_target_suffix="@INSTALL_TARGET_SUFFIX@"
+
+[ -z "$install_target_suffix" ] && exit 0
+
+bin_dir="@CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@"
+lib_dir="@CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_LIBDIR@"
+include_dir="@CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_INCLUDEDIR@"
+
+# `update-alternatives --install` is idempotent. missing slaves will be skipped.
+# symlinks in /etc/alternatives/* point to active target.
+# metadata (priority, slaves) stored in /var/lib/dpkg/alternatives/*
+
+update-alternatives --verbose \
+    --install "$bin_dir/grasp" grasp "$bin_dir/grasp$install_target_suffix" 1 \
+    --slave "$bin_dir/grasp_app" grasp_app "$bin_dir/grasp_app$install_target_suffix" \
+    --slave "$bin_dir/grasp_sdata_dump" grasp_sdata_dump "$bin_dir/grasp_sdata_dump$install_target_suffix" \
+    --slave "$bin_dir/grasp_python_test" grasp_python_test "$bin_dir/grasp_python_test$install_target_suffix" \
+    --slave "$lib_dir/libpython_grasp.so" libpython_grasp.so "$lib_dir/libpython_grasp${install_target_suffix}.so" \
+    --slave "$include_dir/grasp" grasp-headers "$include_dir/grasp${install_target_suffix}"

@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+install_target_suffix="@INSTALL_TARGET_SUFFIX@"
+[ -z "$install_target_suffix" ] && exit 0
+
+bin_dir="@CPACK_PACKAGING_INSTALL_PREFIX@/@CMAKE_INSTALL_BINDIR@"
+
+# `update-alternatives --remove` is idempotent and removes associated slaves.
+update-alternatives --quiet --remove grasp "$bin_dir/grasp$install_target_suffix"

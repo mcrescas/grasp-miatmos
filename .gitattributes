@@ -1,0 +1,2 @@
+src/test/segmenter/*.h5 filter=lfs diff=lfs merge=lfs -text
+src/test/hdf5/expected_output.h5 filter=lfs diff=lfs merge=lfs -text

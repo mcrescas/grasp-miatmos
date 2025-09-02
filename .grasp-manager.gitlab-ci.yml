@@ -1,0 +1,33 @@
+gitlab_ci:
+    compilation:
+        constants_set: satellite
+        use_sudo: false
+        python: true
+        # grasp-manager.sh does not support ">-" modifier
+        cmake_flags: -DCMAKE_INSTALL_PREFIX=/usr -DENABLE_GRASP_BRIDGE=hdf5_tiles -DBUILD_BINARY=OFF -DENABLE_TESTS=OFF -DAPPEND_CONSTANTS_SET_TO_TARGETS=ON
+    modules:
+        # https://code.grasp-open.com/grasp-sas/module-models
+        models: dev
+    constants_sets:
+        aod: https://code.grasp-open.com/grasp-internal/constants-set-aod.git+a24bb2aba374be0dbafac097cad784f74ff674cb
+        diva: https://code.grasp-open.com/grasp-sas/constants-set-diva.git+8673d1f9a9b94ecb4865396be3e429cb5384d13c
+        polder: https://code.grasp-open.com/grasp-internal/constants-set-polder.git+5167b4aa70f277983409a008a2342111a54b48b0
+        satellite: https://code.grasp-open.com/grasp-internal/constants-set-satellite.git+0fde306c200d1a8ce4395697838503c68ca6634f
+        satellitehighsp: https://code.grasp-open.com/grasp-internal/constants-set-satellite_high_sp.git+73afa6f9ef86b344f7cba87ca20a468ae789f038
+        satellitehighspectral: https://code.grasp-open.com/grasp-internal/constants-set-satellite_high_spectral.git+0f181eeeb9abe2d0cc5a5d45840faf07ce5fa472
+        satellite3x3: https://code.grasp-open.com/grasp-tools/constants-set-satellite-3x3.git+8bcd53e9b40e027a91d7b778d16b76d589387005
+        satellite1x1: https://code.grasp-open.com/grasp-internal/constants-set-satellite_1x1y600t.git+4fc80604a8d0b1041cd50cf734f10a22f29723ae
+    extensions:
+        input:
+            drivers:
+                segmenter: https://code.grasp-open.com/grasp-internal/driver-segmenter.git+de34e6122225f1c648420fa5f9f3759f6658d8bc
+                yaml_aod: https://code.grasp-open.com/grasp-internal/driver-yaml_aod.git+v1.0.0.0
+                python: https://code.grasp-open.com/grasp-sas/driver-python.git+v1.1.2.3
+            transformers:
+                python: https://code.grasp-open.com/grasp-sas/transformer-python.git+v1.1.1.0
+                iguessbmbasedonaod: https://code.grasp-open.com/grasp-internal/transformer-iguessbmbasedonaod.git+v1.0.0.0
+        output:
+            current_functions: ~
+            tile_functions:
+                hdf5: https://code.grasp-open.com/grasp-internal/tile-function-hdf5.git+5f4da17471b84f326dc6740929cc4e1706bdc8e9
+                python: https://code.grasp-open.com/grasp-sas/tile-function-python.git+v1.1.1.0

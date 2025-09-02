@@ -1,0 +1,252 @@
+# docs: https://docs.gitlab.com/ce/ci/yaml/README.html
+
+image: docker-registry-default.apps.openshift.grasp-cloud.com/grasp-cloud/ubuntu-base:20.04
+
+variables:
+  LANG: en_US.UTF-8
+  LC_ALL: en_US.UTF-8
+
+cache:
+  key: apt-cache,manager-repos
+  policy: pull-push
+  paths:
+  - .apt-cache/
+  - home/grasp-manager/repos/
+
+before_script:
+- apt-get update
+- export APT_CACHE_DIR="${CI_PROJECT_DIR}/.apt-cache"
+- mkdir --parents --verbose "$APT_CACHE_DIR"
+- function apt_install {
+    DEBIAN_FRONTEND=noninteractive
+    apt-get install --yes --no-install-recommends
+    --option dir::cache::archives="$APT_CACHE_DIR"
+    "$@";
+  }
+- apt_install
+  ca-certificates
+  cmake
+  curl
+  git
+  libcsv-dev `# yaml aod reader`
+  locales
+  make
+- locale-gen en_US.UTF-8
+# gitlab-ci clones without current branch information.
+# however, the cmake script requires this information.
+# `git rev-parse --verify "${CI_COMMIT_REF_NAME}"` and
+# `git show-branch "${CI_COMMIT_REF_NAME}"` match both branches and tags.
+- |-
+  if [ ! -z "$CI_COMMIT_BRANCH" ]; then # on branch?
+  git rev-parse --verify "$CI_COMMIT_BRANCH" && git branch --delete --force "$CI_COMMIT_BRANCH";
+  git checkout -b "$CI_COMMIT_BRANCH";
+  fi
+- function apt_push {
+    dpkg-deb --info "$1";
+    du --human-readable "$1";
+    dpkg-deb --contents "$1";
+    curl --request POST --silent --show-error
+      --user "${APT_ARCHIVE_USER}:${APT_ARCHIVE_PASSWORD}"
+      --header 'Content-Type:multipart/form-data'
+      --data-binary "@$1"
+      "${APT_ARCHIVE_URL}";
+  }
+- git config --global credential.helper store
+- echo "https://gitlab-ci-token:${CI_JOB_TOKEN}@code.grasp-open.com" > ~/.git-credentials
+
+test:
+  stage: test
+  needs: []
+  script:
+  - apt_install
+    cmake
+    g++
+    gcc
+    gfortran
+    lcov `# coverage`
+    libcunit1-dev
+    libglib2.0-dev
+    libsuperlu-dev
+    libyaml-dev
+    make
+    libpython3-dev
+    `# grasp-segmenter`
+    libboost-filesystem-dev
+    libboost-regex-dev
+    libgdal-dev
+    libgtbx-data=9.2.0
+    regridder=4.1.0
+    libyaml-cpp-dev
+    hdf5-tools # needed for checking the output of the hdf5 test (h5diff)
+  # Pull driver to perform segmenter driver tests
+  - cp .grasp-manager.gitlab-ci-test.yml grasp-manager.yml
+  - sed "s#git@code.grasp-open.com:#https://code.grasp-open.com/#" grasp-manager.sh > grasp-manager-ci.sh
+  - chmod +x grasp-manager-ci.sh
+  - ./grasp-manager-ci.sh pull gitlab_ci
+  # Build and run the tests
+  - ./grasp-manager-ci.sh make gitlab_ci
+  - cd build
+  - make --jobs=$(nproc)
+  - ctest -V -T test -E test_zipper
+  - make coverage
+  artifacts:
+    paths:
+    - build/coverage/
+  coverage: '/lines\.+: (\d+\.\d+\%)/'
+
+pack:
+  stage: deploy
+  needs: [test]
+  script:
+  - apt_install
+    g++
+    gcc
+    gfortran
+    libcunit1-dev
+    libglib2.0-dev
+    libsuperlu-dev
+    libyaml-dev
+    libpython3-dev
+    `# grasp-segmenter`
+    libboost-filesystem-dev
+    libboost-regex-dev
+    libgdal-dev
+    libgtbx-data=9.2.0
+    regridder=4.1.0
+    libyaml-cpp-dev
+  - cp .grasp-manager.gitlab-ci.yml grasp-manager.yml
+  - sed "s#git@code.grasp-open.com:#https://code.grasp-open.com/#" grasp-manager.sh > grasp-manager-ci.sh
+  - chmod +x grasp-manager-ci.sh
+  - ./grasp-manager-ci.sh pull gitlab_ci
+  - mkdir deb
+  - |
+    for constants_set in 'generic' 'satellite' 'aod' 'polder' 'diva' 'satellitehighsp' 'satellitehighspectral' 'satellite3x3' 'satellite1x1'; do (
+    set -ex;
+    sed --in-place "s/constants_set: \\w*/constants_set: $constants_set/" grasp-manager.yml;
+    ./grasp-manager-ci.sh make gitlab_ci;
+    cd build;
+    make package;
+    mv *.deb ../deb
+    ); done
+  - for deb_name in deb/*; do apt_push "$deb_name"; done
+  artifacts:
+    paths:
+    - deb/
+
+pack-base-kernels:
+  stage: deploy
+  needs: [test]
+  script:
+  - cd src/retrieval/internal_files
+  - cmake .
+  - make package
+  - PACKAGE_NAME="$(dpkg-deb --field *.deb Package)"
+  - PACKAGE_VERSION="$(dpkg-deb --field *.deb Version)"
+  - 'apt-cache policy "$PACKAGE_NAME" | grep "\b$PACKAGE_VERSION\b" || apt_push *.deb'
+
+pack-examples:
+  stage: deploy
+  needs: [test]
+  script:
+  - cd examples
+  - cmake . -DAPPEND_CONSTANTS_SET_TO_TARGETS=ON
+  - >
+    find -name '*.yml' -exec sed -i -e
+    's#path_to_internal_files: .*#path_to_internal_files: /usr/share/grasp/kernels/#'
+    {} \;
+  - make package
+  - apt_push *.deb
+  artifacts:
+    paths:
+    - examples/*.deb
+
+build-docs:
+  only:
+    refs: [dev] # save CI time
+  stage: build
+  needs: []
+  before_script: []
+  script:
+  - apt-get update
+  - apt-get install --no-install-recommends --yes fop make xsltproc
+  - cd doc/overview
+  - make grasp-open
+  artifacts:
+    paths: [doc/overview/website/]
+
+build-techdocs:
+  only:
+    refs: [dev] # save CI time
+  stage: build
+  needs: []
+  before_script: []
+  script:
+  - apt-get update
+  - apt-get install --no-install-recommends --yes
+    doxygen
+    make
+    plantuml
+    texlive-binaries `# dvips`
+    texlive-latex-base `# latex executable`
+    texlive-latex-extra `# newunicodechar.sty`
+    || (ls /tmp/fmtutil.* && echo ignoring fmtutil error)
+  - cd doc/technical
+  - make grasp-open
+  artifacts:
+    paths: [doc/technical/website/]
+
+# prequisite: add the following via `crontab -e` on the webserver:
+# > */5 * * * * rsync --recursive --times --delete /mnt/BLOCKSTORAGE/home/238688.cloudwaysapps.com/hfauutbkus/public_html/docs/ /mnt/BLOCKSTORAGE/home/238688.cloudwaysapps.com/pwqzsuexuw/public_html/doc
+deploy-docs:
+  only:
+    refs: [dev] # redundant, but better be safe
+  stage: deploy
+  needs: [build-docs]
+  before_script: []
+  variables:
+    DOCS_UPLOAD_SSH_HOST: &docs_upload_ssh_host 178.128.202.144
+    DOCS_UPLOAD_SSH_HOST_PUBLIC_KEY: &docs_upload_ssh_public_key >-
+      ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDEU8qhZq7ALdjzRonQDbSktu2+IuR/wF3yNPf5ypk6eK0WJbau4T1LO/CwumsOY5Gqv2Pbxr0yDElVBbNg0i5+pn328G2jCA4vc+ntbitQviWNJHj2tJ5/fulgsbU1KhzdCELdQCpb4YphJF5+OnaWoW2Yy7qPVT7ws1YHQzvrEMM9nex20yZycAJU6mlF7irK4py1UUsODIatrV1ssRFgkeoCa1sBmXvVb51yzdWNGW+YSGap04GMT3aVGb7vZzrw1DOhga5ltm9gSkq9HMjRURWY1UsOusE8nrZe2OxJWu2SJ514xjyv4HR7q9t4RjD5xtXAVu6wTpOyNpT8LKZ1
+  script:
+  # fail if password unavailable (only available on protected branches)
+  - set -u
+  - apt-get update
+  # remote user does not have shell access (required for rsync)
+  - apt-get install --no-install-recommends --yes lftp
+  - mkdir --parents ~/.ssh
+  - echo "$DOCS_UPLOAD_SSH_HOST $DOCS_UPLOAD_SSH_HOST_PUBLIC_KEY" > ~/.ssh/known_hosts
+  # after `make grasp-open`:
+  # > $ find doc/overview/website -type l -exec stat --format=%N {} \+
+  # > 'doc/overview/website/figures' -> '../figures'
+  # > 'doc/overview/website/images' -> '../docbook-xsl-ns/images'
+  # remote user is not permitted to create syminks  ("ln: Access failed: Permission denied (../figures)")
+  # and lftp does not support automatic resolving
+  - cp --recursive --dereference doc/overview/website website-dereferenced
+  - LFTP_PASSWORD="$DOCS_UPLOAD_SSH_PASSWORD" lftp -c "
+    set sftp:auto-confirm no;
+    open --env-password sftp://gitlab-ci@$DOCS_UPLOAD_SSH_HOST;
+    mirror --reverse --delete --verbose=3 website-dereferenced/ /public_html/docs;
+    "
+
+# prequisite: add the following via `crontab -e` on the webserver:
+# > */5 * * * * rsync --recursive --times --delete /mnt/BLOCKSTORAGE/home/238688.cloudwaysapps.com/hfauutbkus/public_html/techdocs/ /mnt/BLOCKSTORAGE/home/238688.cloudwaysapps.com/pwqzsuexuw/public_html/tech-doc
+deploy-techdocs:
+  only:
+    refs: [dev] # redundant, but better be safe
+  stage: deploy
+  needs: [build-techdocs]
+  before_script: []
+  variables:
+    DOCS_UPLOAD_SSH_HOST: *docs_upload_ssh_host
+    DOCS_UPLOAD_SSH_HOST_PUBLIC_KEY: *docs_upload_ssh_public_key
+  script:
+  - set -u
+  - apt-get update
+  - apt-get install --no-install-recommends --yes lftp
+  - mkdir --parents ~/.ssh
+  - echo "$DOCS_UPLOAD_SSH_HOST $DOCS_UPLOAD_SSH_HOST_PUBLIC_KEY" > ~/.ssh/known_hosts
+  - LFTP_PASSWORD="$DOCS_UPLOAD_SSH_PASSWORD" lftp -c "
+    set sftp:auto-confirm no;
+    open --env-password sftp://gitlab-ci@$DOCS_UPLOAD_SSH_HOST;
+    mirror --reverse --delete --verbose=3 doc/technical/website /public_html/techdocs;
+    "
